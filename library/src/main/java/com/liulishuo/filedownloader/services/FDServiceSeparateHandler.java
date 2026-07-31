@@ -15,7 +15,7 @@
  */
 package com.liulishuo.filedownloader.services;
 
-import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE;
+import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
 
 import android.app.Notification;
 import android.content.Intent;
@@ -47,18 +47,22 @@ public class FDServiceSeparateHandler extends IFileDownloadIPCService.Stub
 
     @SuppressWarnings("UnusedReturnValue")
     private synchronized int callback(MessageSnapshot snapShot) {
-        final int n = callbackList.beginBroadcast();
+        final int count = callbackList.beginBroadcast();
         try {
-            for (int i = 0; i < n; i++) {
-                callbackList.getBroadcastItem(i).callback(snapShot);
+            for (int i = 0; i < count; i++) {
+                try {
+                    callbackList.getBroadcastItem(i).callback(snapShot);
+                } catch (RemoteException e) {
+                    FileDownloadLog.e(this, e, "callback client is unavailable");
+                } catch (RuntimeException e) {
+                    FileDownloadLog.e(this, e, "callback client crashed");
+                }
             }
-        } catch (RemoteException e) {
-            FileDownloadLog.e(this, e, "callback error");
         } finally {
             callbackList.finishBroadcast();
         }
 
-        return n;
+        return count;
     }
 
     FDServiceSeparateHandler(WeakReference<FileDownloadService> wService,
@@ -70,17 +74,17 @@ public class FDServiceSeparateHandler extends IFileDownloadIPCService.Stub
     }
 
     @Override
-    public void registerCallback(IFileDownloadIPCCallback callback) throws RemoteException {
-        callbackList.register(callback);
+    public void registerCallback(IFileDownloadIPCCallback callback) {
+        if (callback != null) callbackList.register(callback);
     }
 
     @Override
-    public void unregisterCallback(IFileDownloadIPCCallback callback) throws RemoteException {
-        callbackList.unregister(callback);
+    public void unregisterCallback(IFileDownloadIPCCallback callback) {
+        if (callback != null) callbackList.unregister(callback);
     }
 
     @Override
-    public boolean checkDownloading(String url, String path) throws RemoteException {
+    public boolean checkDownloading(String url, String path) {
         return downloadManager.isDownloading(url, path);
     }
 
@@ -88,73 +92,78 @@ public class FDServiceSeparateHandler extends IFileDownloadIPCService.Stub
     public void start(String url, String path, boolean pathAsDirectory, int callbackProgressTimes,
                       int callbackProgressMinIntervalMillis, int autoRetryTimes,
                       boolean forceReDownload,
-                      FileDownloadHeader header, boolean isWifiRequired) throws RemoteException {
+                      FileDownloadHeader header, boolean isWifiRequired) {
         downloadManager.start(url, path, pathAsDirectory, callbackProgressTimes,
                 callbackProgressMinIntervalMillis, autoRetryTimes, forceReDownload, header,
                 isWifiRequired);
     }
 
     @Override
-    public boolean pause(int downloadId) throws RemoteException {
+    public boolean pause(int downloadId) {
         return downloadManager.pause(downloadId);
     }
 
     @Override
-    public void pauseAllTasks() throws RemoteException {
+    public void pauseAllTasks() {
         downloadManager.pauseAll();
     }
 
     @Override
-    public boolean setMaxNetworkThreadCount(int count) throws RemoteException {
+    public boolean setMaxNetworkThreadCount(int count) {
         return downloadManager.setMaxNetworkThreadCount(count);
     }
 
     @Override
-    public long getSofar(int downloadId) throws RemoteException {
+    public long getSofar(int downloadId) {
         return downloadManager.getSoFar(downloadId);
     }
 
     @Override
-    public long getTotal(int downloadId) throws RemoteException {
+    public long getTotal(int downloadId) {
         return downloadManager.getTotal(downloadId);
     }
 
     @Override
-    public byte getStatus(int downloadId) throws RemoteException {
+    public byte getStatus(int downloadId) {
         return downloadManager.getStatus(downloadId);
     }
 
     @Override
-    public boolean isIdle() throws RemoteException {
+    public boolean isIdle() {
         return downloadManager.isIdle();
     }
 
     @Override
-    public void startForeground(int id, Notification notification) throws RemoteException {
-        if (this.wService != null && this.wService.get() != null) {
+    public void startForeground(int id, Notification notification) {
+        final FileDownloadService service = wService.get();
+        if (service == null || notification == null) return;
+
+        try {
             ServiceCompat.startForeground(
-                    this.wService.get(),
+                    service,
                     id,
                     notification,
-                    FOREGROUND_SERVICE_TYPE_SHORT_SERVICE
+                    FOREGROUND_SERVICE_TYPE_DATA_SYNC
             );
+        } catch (RuntimeException e) {
+            FileDownloadLog.e(this, e, "unable to enter foreground mode");
+            service.stopSelf();
         }
     }
 
     @Override
-    public void stopForeground(boolean removeNotification) throws RemoteException {
-        if (this.wService != null && this.wService.get() != null) {
-            this.wService.get().stopForeground(removeNotification);
-        }
+    public void stopForeground(boolean removeNotification) {
+        final FileDownloadService service = wService.get();
+        if (service != null) service.stopForeground(removeNotification);
     }
 
     @Override
-    public boolean clearTaskData(int id) throws RemoteException {
+    public boolean clearTaskData(int id) {
         return downloadManager.clearTaskData(id);
     }
 
     @Override
-    public void clearAllTaskData() throws RemoteException {
+    public void clearAllTaskData() {
         downloadManager.clearAllTaskData();
     }
 
@@ -170,6 +179,7 @@ public class FDServiceSeparateHandler extends IFileDownloadIPCService.Stub
     @Override
     public void onDestroy() {
         MessageSnapshotFlow.getImpl().setReceiver(null);
+        callbackList.kill();
     }
 
     @Override
