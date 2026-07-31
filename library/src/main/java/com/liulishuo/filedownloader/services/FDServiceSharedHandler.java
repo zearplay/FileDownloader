@@ -15,7 +15,7 @@
  */
 package com.liulishuo.filedownloader.services;
 
-import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE;
+import static android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
 
 import android.app.Notification;
 import android.content.Intent;
@@ -27,6 +27,7 @@ import com.liulishuo.filedownloader.FileDownloadServiceProxy;
 import com.liulishuo.filedownloader.i.IFileDownloadIPCCallback;
 import com.liulishuo.filedownloader.i.IFileDownloadIPCService;
 import com.liulishuo.filedownloader.model.FileDownloadHeader;
+import com.liulishuo.filedownloader.util.FileDownloadLog;
 
 import java.lang.ref.WeakReference;
 
@@ -104,21 +105,26 @@ public class FDServiceSharedHandler extends IFileDownloadIPCService.Stub
 
     @Override
     public void startForeground(int id, Notification notification) {
-        if (this.wService != null && this.wService.get() != null) {
+        final FileDownloadService service = wService.get();
+        if (service == null || notification == null) return;
+
+        try {
             ServiceCompat.startForeground(
-                    this.wService.get(),
+                    service,
                     id,
                     notification,
-                    FOREGROUND_SERVICE_TYPE_SHORT_SERVICE
+                    FOREGROUND_SERVICE_TYPE_DATA_SYNC
             );
+        } catch (RuntimeException e) {
+            FileDownloadLog.e(this, e, "unable to enter foreground mode");
+            service.stopSelf();
         }
     }
 
     @Override
     public void stopForeground(boolean removeNotification) {
-        if (this.wService != null && this.wService.get() != null) {
-            this.wService.get().stopForeground(removeNotification);
-        }
+        final FileDownloadService service = wService.get();
+        if (service != null) service.stopForeground(removeNotification);
     }
 
     @Override
@@ -133,8 +139,9 @@ public class FDServiceSharedHandler extends IFileDownloadIPCService.Stub
 
     @Override
     public void onStartCommand(Intent intent, int flags, int startId) {
-        //noinspection ConstantConditions
-        FileDownloadServiceProxy.getConnectionListener().onConnected(this);
+        final FileDownloadServiceSharedConnection listener =
+                FileDownloadServiceProxy.getConnectionListener();
+        if (listener != null) listener.onConnected(this);
     }
 
     @Override
@@ -144,8 +151,9 @@ public class FDServiceSharedHandler extends IFileDownloadIPCService.Stub
 
     @Override
     public void onDestroy() {
-        //noinspection ConstantConditions
-        FileDownloadServiceProxy.getConnectionListener().onDisconnected();
+        final FileDownloadServiceSharedConnection listener =
+                FileDownloadServiceProxy.getConnectionListener();
+        if (listener != null) listener.onDisconnected();
     }
 
     public interface FileDownloadServiceSharedConnection {
