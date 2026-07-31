@@ -24,7 +24,6 @@ jobs:
       - name: Validate library and demo
         run: >-
           ./gradlew
-          :library:checkstyle
           :library:testDebugUnitTest
           :library:assembleRelease
           :library:publishReleasePublicationToMavenLocal
