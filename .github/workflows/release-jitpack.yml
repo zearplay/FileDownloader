@@ -1,0 +1,57 @@
+name: Release JitPack
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-jitpack-1.7.11-anrfix
+  cancel-in-progress: false
+
+env:
+  RELEASE_VERSION: 1.7.11-anrfix
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create release tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse "refs/tags/${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "Tag ${RELEASE_VERSION} already exists"
+          else
+            git tag -a "${RELEASE_VERSION}" -m "FileDownloader ${RELEASE_VERSION}"
+            git push origin "${RELEASE_VERSION}"
+          fi
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${RELEASE_VERSION}" >/dev/null 2>&1 || \
+            gh release create "${RELEASE_VERSION}" \
+              --title "FileDownloader ${RELEASE_VERSION}" \
+              --notes "ANR and crash hardening release with JitPack publication."
+      - name: Trigger and verify JitPack build
+        run: |
+          BUILD_LOG="https://jitpack.io/com/github/zearplay/FileDownloader/${RELEASE_VERSION}/build.log"
+          curl --fail --location \
+            --retry 20 --retry-delay 15 --retry-all-errors \
+            --max-time 1200 "${BUILD_LOG}" | tee jitpack-build.log
+          grep -q "BUILD SUCCESSFUL" jitpack-build.log
+      - name: Upload JitPack log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jitpack-build-log-${{ env.RELEASE_VERSION }}
+          path: jitpack-build.log
+          if-no-files-found: ignore
