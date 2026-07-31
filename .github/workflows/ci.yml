@@ -3,9 +3,13 @@ name: CI
 on:
   push:
     branches:
-      - trunk
+      - master
+      - 'agent/**'
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -17,4 +21,17 @@ jobs:
           distribution: 'zulu'
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew demo:assembleRelease
+      - name: Validate library and demo
+        run: >-
+          ./gradlew
+          :library:checkstyle
+          :library:testDebugUnitTest
+          :library:assembleRelease
+          :library:publishReleasePublicationToMavenLocal
+          :demo:assembleRelease
+      - name: Upload release AAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: FileDownloader-1.7.11-anrfix
+          path: library/build/outputs/aar/library-release.aar
+          if-no-files-found: error
