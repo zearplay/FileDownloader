@@ -1,6 +1,6 @@
 plugins {
     id 'com.android.library'
-    id 'com.vanniktech.maven.publish'
+    id 'maven-publish'
 }
 
 plugins.apply('checkstyle')
@@ -10,6 +10,12 @@ android {
 
     buildFeatures {
         aidl true
+    }
+
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+        }
     }
 }
 
@@ -24,19 +30,54 @@ task('checkstyle', type: Checkstyle) {
     classpath = files()
 }
 
-afterEvaluate {
-    tasks.findByName('check').dependsOn('checkstyle')
-}
-
 checkstyle {
     toolVersion = '10.17.0'
+}
+
+afterEvaluate {
+    tasks.findByName('check').dependsOn('checkstyle')
+
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = GROUP
+                artifactId = 'FileDownloader'
+                version = VERSION_NAME
+
+                pom {
+                    name = 'FileDownloader'
+                    description = 'Android file download library with ANR and crash hardening.'
+                    url = 'https://github.com/zearplay/FileDownloader'
+                    licenses {
+                        license {
+                            name = 'The Apache Software License, Version 2.0'
+                            url = 'https://www.apache.org/licenses/LICENSE-2.0.txt'
+                            distribution = 'repo'
+                        }
+                    }
+                    developers {
+                        developer {
+                            id = 'zearplay'
+                            name = 'zearplay'
+                            url = 'https://github.com/zearplay'
+                        }
+                    }
+                    scm {
+                        url = 'https://github.com/zearplay/FileDownloader'
+                        connection = 'scm:git:https://github.com/zearplay/FileDownloader.git'
+                        developerConnection = 'scm:git:ssh://git@github.com/zearplay/FileDownloader.git'
+                    }
+                }
+            }
+        }
+    }
 }
 
 dependencies {
     implementation 'androidx.core:core:1.13.1'
 
-    testImplementation "junit:junit:4.13.2"
-    //noinspection GradleDynamicVersion
-    testImplementation "org.mockito:mockito-core:5.+"
-    testImplementation "org.robolectric:robolectric:4.13"
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:5.12.0'
+    testImplementation 'org.robolectric:robolectric:4.13'
 }
