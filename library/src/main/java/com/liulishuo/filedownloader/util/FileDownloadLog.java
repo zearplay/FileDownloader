@@ -65,13 +65,22 @@ public class FileDownloadLog {
             return;
         }
 
-        Log.println(priority, getTag(o), FileDownloadUtils.formatString(message, args));
+        String formattedMessage;
+        try {
+            formattedMessage = FileDownloadUtils.formatString(message, args);
+        } catch (RuntimeException formatError) {
+            formattedMessage = message + " [log formatting failed: "
+                    + formatError.getClass().getSimpleName() + "]";
+        }
+
+        Log.println(priority, getTag(o), formattedMessage);
         if (throwable != null) {
-            throwable.printStackTrace();
+            Log.println(priority, getTag(o), Log.getStackTraceString(throwable));
         }
     }
 
     private static String getTag(final Object o) {
+        if (o == null) return TAG + "Unknown";
         return TAG + ((o instanceof Class)
                 ? ((Class) o).getSimpleName() : o.getClass().getSimpleName());
     }
